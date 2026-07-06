@@ -80,15 +80,7 @@ def build_master_playlist(variants, output_dir):
         f.write('\n'.join(lines) + '\n')
     return master_path
 
-def notify_django(media_id, status):
-    try:
-        requests.post(
-            settings.DJANGO_WEBHOOK_URL,
-            json={"media_id": media_id, "status": status},
-            timeout=10
-        )
-    except Exception as e:
-        logger.error(f"Failed to notify Django for media {media_id}: {e}")
+
 
 @celery_app.task(bind=True, max_retries=2)
 def process_video_task(self, media_id):
@@ -132,16 +124,13 @@ def process_video_task(self, media_id):
         media.hls_path = f'/media/hls/{media_id}'
         media.status = "ready"
         db.commit()
-        
-        notify_django(media_id, "ready")
-        
+
     except Exception as exc:
         logger.error(f'Video processing failed for {media_id}: {exc}')
         if 'media' in locals() and media:
             media.status = "failed"
             media.error_message = str(exc)
             db.commit()
-        notify_django(media_id, "failed")
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()
